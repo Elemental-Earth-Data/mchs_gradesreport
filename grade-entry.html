@@ -269,13 +269,48 @@
       background: var(--bg-warm);
       border-radius: 4px;
       overflow: hidden;
+      display: flex;
     }
     
     .progress-fill {
       height: 100%;
-      background: linear-gradient(90deg, var(--accent-forest) 0%, var(--accent-forest-light) 100%);
-      border-radius: 4px;
       transition: width 0.3s ease;
+    }
+    
+    .progress-complete {
+      background: linear-gradient(90deg, var(--accent-forest) 0%, var(--accent-forest-light) 100%);
+    }
+    
+    .progress-draft {
+      background: linear-gradient(90deg, var(--warning) 0%, #E8B84D 100%);
+    }
+    
+    .progress-legend {
+      display: flex;
+      gap: 1.5rem;
+      margin-top: 0.75rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .legend-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+    }
+    
+    .legend-complete {
+      background: var(--accent-forest);
+    }
+    
+    .legend-draft {
+      background: var(--warning);
     }
     
     /* Student Cards */
@@ -299,6 +334,10 @@
     
     .student-card.completed {
       border-left: 4px solid var(--success);
+    }
+    
+    .student-card.draft {
+      border-left: 4px solid var(--warning);
     }
     
     .student-card.has-errors {
@@ -349,6 +388,13 @@
     
     .status-complete {
       color: var(--success);
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+    
+    .status-draft {
+      color: var(--warning);
       display: flex;
       align-items: center;
       gap: 0.25rem;
@@ -651,6 +697,7 @@
       margin-top: 1.5rem;
       padding-top: 1.5rem;
       border-top: 1px solid var(--border);
+      flex-wrap: wrap;
     }
     
     .save-btn {
@@ -661,8 +708,6 @@
       font-size: 0.95rem;
       font-weight: 600;
       font-family: inherit;
-      background: linear-gradient(135deg, var(--accent-forest) 0%, var(--accent-forest-light) 100%);
-      color: white;
       border: none;
       border-radius: 10px;
       cursor: pointer;
@@ -677,6 +722,21 @@
     .save-btn:disabled {
       opacity: 0.6;
       cursor: not-allowed;
+    }
+    
+    .save-draft {
+      background: var(--white);
+      color: var(--warning);
+      border: 2px solid var(--warning);
+    }
+    
+    .save-draft:hover:not(:disabled) {
+      background: rgba(212, 160, 61, 0.1);
+    }
+    
+    .save-complete {
+      background: linear-gradient(135deg, var(--accent-forest) 0%, var(--accent-forest-light) 100%);
+      color: white;
     }
     
     /* Toast Notifications */
@@ -946,10 +1006,15 @@ const CONFIG = {
     <div class="progress-section">
       <div class="progress-header">
         <span class="progress-title">Completion Progress</span>
-        <span id="progress-count" class="progress-count">0 of 0 students</span>
+        <span id="progress-count" class="progress-count">0 complete, 0 draft of 0 students</span>
       </div>
       <div class="progress-bar">
-        <div id="progress-fill" class="progress-fill" style="width: 0%"></div>
+        <div id="progress-fill-complete" class="progress-fill progress-complete" style="width: 0%"></div>
+        <div id="progress-fill-draft" class="progress-fill progress-draft" style="width: 0%"></div>
+      </div>
+      <div class="progress-legend">
+        <span class="legend-item"><span class="legend-color legend-complete"></span> Complete</span>
+        <span class="legend-item"><span class="legend-color legend-draft"></span> Draft</span>
       </div>
     </div>
     
@@ -1016,7 +1081,8 @@ function getStudentData(studentName) {
       classesMissed: '',
       timesLate: '',
       skills: {},
-      comment: ''
+      comment: '',
+      status: '' // '', 'draft', or 'complete'
     };
   }
   return studentData[studentName];
@@ -1024,8 +1090,18 @@ function getStudentData(studentName) {
 
 function isStudentComplete(studentName) {
   const data = getStudentData(studentName);
+  return data.status === 'complete';
+}
+
+function isStudentDraft(studentName) {
+  const data = getStudentData(studentName);
+  return data.status === 'draft';
+}
+
+function canBeComplete(studentName) {
+  // Check if all required fields are filled for complete status
+  const data = getStudentData(studentName);
   if (data.percentageMark === '' || data.percentageMark === null) return false;
-  // Classes Missed and Times Late are optional
   for (const skill of CONFIG.LEARNING_SKILLS) {
     if (!data.skills[skill]) return false;
   }
@@ -1087,9 +1163,11 @@ function updateProgress() {
   const students = teacherInfo.courses[currentCourse] || [];
   const total = students.length;
   const completed = students.filter(s => isStudentComplete(s)).length;
+  const drafts = students.filter(s => isStudentDraft(s)).length;
   
-  document.getElementById('progress-count').textContent = `${completed} of ${total} students`;
-  document.getElementById('progress-fill').style.width = `${total > 0 ? (completed / total) * 100 : 0}%`;
+  document.getElementById('progress-count').textContent = `${completed} complete, ${drafts} draft of ${total} students`;
+  document.getElementById('progress-fill-complete').style.width = `${total > 0 ? (completed / total) * 100 : 0}%`;
+  document.getElementById('progress-fill-draft').style.width = `${total > 0 ? (drafts / total) * 100 : 0}%`;
 }
 
 // ============================================
@@ -1098,20 +1176,29 @@ function updateProgress() {
 function renderStudentCard(studentName) {
   const data = getStudentData(studentName);
   const isComplete = isStudentComplete(studentName);
+  const isDraft = isStudentDraft(studentName);
   const isExpanded = expandedStudents[studentName];
   
+  let cardClass = '';
+  if (isComplete) cardClass = 'completed';
+  else if (isDraft) cardClass = 'draft';
+  
+  let statusHtml = '<span class="status-incomplete">Not saved</span>';
+  if (isComplete) {
+    statusHtml = '<span class="status-complete"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Complete</span>';
+  } else if (isDraft) {
+    statusHtml = '<span class="status-draft"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Draft</span>';
+  }
+  
   return `
-    <div class="student-card ${isComplete ? 'completed' : ''}" data-student="${escapeHtml(studentName)}">
+    <div class="student-card ${cardClass}" data-student="${escapeHtml(studentName)}">
       <div class="student-header" onclick="toggleStudent('${escapeHtml(studentName)}')">
         <div class="student-info">
           <div class="student-avatar">${getInitials(studentName)}</div>
           <div>
             <div class="student-name">${escapeHtml(studentName)}</div>
             <div class="student-status">
-              ${isComplete 
-                ? '<span class="status-complete"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Complete</span>'
-                : '<span class="status-incomplete">Incomplete</span>'
-              }
+              ${statusHtml}
             </div>
           </div>
         </div>
@@ -1144,7 +1231,7 @@ function renderStudentCard(studentName) {
         
         <!-- Attendance Section -->
         <div class="form-section">
-          <h3 class="section-title">Attendance <span style="font-weight: normal; color: var(--text-light); font-size: 0.85rem;">(optional)</span></h3>
+          <h3 class="section-title">Attendance</h3>
           <div class="attendance-grid">
             <div class="attendance-item">
               <label class="grade-label">Classes Missed</label>
@@ -1152,7 +1239,7 @@ function renderStudentCard(studentName) {
                 type="number"
                 class="grade-input"
                 min="0"
-                placeholder="0"
+                placeholder=""
                 value="${data.classesMissed !== '' ? escapeHtml(String(data.classesMissed)) : ''}"
                 oninput="updateField('${escapeHtml(studentName)}', 'classesMissed', this.value)"
               />
@@ -1163,7 +1250,7 @@ function renderStudentCard(studentName) {
                 type="number"
                 class="grade-input"
                 min="0"
-                placeholder="0"
+                placeholder=""
                 value="${data.timesLate !== '' ? escapeHtml(String(data.timesLate)) : ''}"
                 oninput="updateField('${escapeHtml(studentName)}', 'timesLate', this.value)"
               />
@@ -1204,15 +1291,21 @@ function renderStudentCard(studentName) {
           <div id="error-comment-${escapeHtml(studentName)}" class="error-message hidden"></div>
         </div>
         
-        <!-- Save Button -->
+        <!-- Save Buttons -->
         <div class="save-section">
-          <button class="save-btn" onclick="saveStudent('${escapeHtml(studentName)}')">
+          <button class="save-btn save-draft" onclick="saveStudent('${escapeHtml(studentName)}', 'draft')">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-              <polyline points="17 21 17 13 7 13 7 21"/>
-              <polyline points="7 3 7 8 15 8"/>
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
-            Save Entry
+            Save as Draft
+          </button>
+          <button class="save-btn save-complete" onclick="saveStudent('${escapeHtml(studentName)}', 'complete')">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            Save as Complete
           </button>
         </div>
       </div>
@@ -1269,8 +1362,7 @@ function updateField(studentName, field, value) {
   updateProgress();
 }
 
-async function saveStudent(studentName) {
-  const errors = validateStudent(studentName);
+async function saveStudent(studentName, saveType) {
   const card = document.querySelector(`[data-student="${studentName}"]`);
   
   // Clear previous errors
@@ -1280,45 +1372,49 @@ async function saveStudent(studentName) {
   });
   card.querySelectorAll('.error').forEach(el => el.classList.remove('error'));
   
-  // Show errors if any
-  if (Object.keys(errors).length > 0) {
-    if (errors.percentageMark) {
-      const errorEl = document.getElementById(`error-percentageMark-${studentName}`);
-      errorEl.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg> ${errors.percentageMark}`;
-      errorEl.classList.remove('hidden');
-    }
+  // For 'complete', validate all fields
+  if (saveType === 'complete') {
+    const errors = validateStudent(studentName);
     
-    if (errors.classesMissed) {
-      const errorEl = document.getElementById(`error-classesMissed-${studentName}`);
-      errorEl.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg> ${errors.classesMissed}`;
-      errorEl.classList.remove('hidden');
+    if (Object.keys(errors).length > 0) {
+      if (errors.percentageMark) {
+        const errorEl = document.getElementById(`error-percentageMark-${studentName}`);
+        errorEl.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg> ${errors.percentageMark}`;
+        errorEl.classList.remove('hidden');
+      }
+      
+      if (errors.classesMissed) {
+        const errorEl = document.getElementById(`error-classesMissed-${studentName}`);
+        errorEl.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg> ${errors.classesMissed}`;
+        errorEl.classList.remove('hidden');
+      }
+      
+      if (errors.timesLate) {
+        const errorEl = document.getElementById(`error-timesLate-${studentName}`);
+        errorEl.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg> ${errors.timesLate}`;
+        errorEl.classList.remove('hidden');
+      }
+      
+      if (errors.skills) {
+        const errorEl = document.getElementById(`error-skills-${studentName}`);
+        errorEl.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg> Please complete all learning skills`;
+        errorEl.classList.remove('hidden');
+      }
+      
+      if (errors.comment) {
+        const errorEl = document.getElementById(`error-comment-${studentName}`);
+        errorEl.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg> ${errors.comment}`;
+        errorEl.classList.remove('hidden');
+        card.querySelector('.comment-textarea').classList.add('error');
+      }
+      
+      showToast('Please fix the errors before saving as complete', 'error');
+      return;
     }
-    
-    if (errors.timesLate) {
-      const errorEl = document.getElementById(`error-timesLate-${studentName}`);
-      errorEl.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg> ${errors.timesLate}`;
-      errorEl.classList.remove('hidden');
-    }
-    
-    if (errors.skills) {
-      const errorEl = document.getElementById(`error-skills-${studentName}`);
-      errorEl.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg> Please complete all learning skills`;
-      errorEl.classList.remove('hidden');
-    }
-    
-    if (errors.comment) {
-      const errorEl = document.getElementById(`error-comment-${studentName}`);
-      errorEl.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg> ${errors.comment}`;
-      errorEl.classList.remove('hidden');
-      card.querySelector('.comment-textarea').classList.add('error');
-    }
-    
-    showToast('Please fix the errors before saving', 'error');
-    return;
   }
   
   // Save to Google Sheets
-  const saveBtn = card.querySelector('.save-btn');
+  const saveBtn = card.querySelector(saveType === 'draft' ? '.save-draft' : '.save-complete');
   const originalText = saveBtn.innerHTML;
   saveBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Saving...`;
   saveBtn.disabled = true;
@@ -1337,6 +1433,7 @@ async function saveStudent(studentName) {
       timesLate: data.timesLate,
       skills: data.skills,
       comment: data.comment,
+      status: saveType,
       timestamp: new Date().toISOString()
     };
     
@@ -1349,7 +1446,11 @@ async function saveStudent(studentName) {
       body: JSON.stringify(payload)
     });
     
-    showToast(`Saved entry for ${studentName}`, 'success');
+    // Update local status
+    data.status = saveType;
+    
+    const statusText = saveType === 'complete' ? 'complete' : 'draft';
+    showToast(`Saved ${studentName} as ${statusText}`, 'success');
     renderStudents();
   } catch (error) {
     console.error('Save error:', error);
@@ -1437,7 +1538,8 @@ async function loadExistingData() {
                 classesMissed: entry.classes_missed !== undefined ? entry.classes_missed : '',
                 timesLate: entry.times_late !== undefined ? entry.times_late : '',
                 skills: entry.skills || {},
-                comment: entry.comment || ''
+                comment: entry.comment || '',
+                status: entry.status || ''
               };
               loadedCount++;
             }
