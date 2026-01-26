@@ -15,7 +15,7 @@
 // ============================================
 // CONFIGURATION - UPDATE THIS
 // ============================================
-const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID_HERE'; // Replace with your Google Sheet ID
+const SPREADSHEET_ID = '1MAo7F7SVNJubF8Ke2xdKsBs97tVxLHcI4J7h_V3kQSA'; // Replace with your Google Sheet ID
 const SHEET_NAME = 'Grades'; // Name of the sheet tab to use
 
 // Learning skills (must match the React app's CONFIG.LEARNING_SKILLS)
@@ -142,6 +142,9 @@ function saveGradeEntry(data) {
   // Add comment
   rowData.push(data.comment);
   
+  // Add status
+  rowData.push(data.status || 'draft');
+  
   // Add last modified timestamp
   rowData.push(new Date().toISOString());
   
@@ -240,7 +243,8 @@ function setupSheetHeaders(sheet) {
   }
   
   sheet.setColumnWidth(9 + LEARNING_SKILLS.length, 400); // Comment
-  sheet.setColumnWidth(10 + LEARNING_SKILLS.length, 180); // Last Modified
+  sheet.setColumnWidth(10 + LEARNING_SKILLS.length, 100); // Status
+  sheet.setColumnWidth(11 + LEARNING_SKILLS.length, 180); // Last Modified
   
   // Freeze header row
   sheet.setFrozenRows(1);
@@ -267,6 +271,7 @@ function getHeaders() {
   }
   
   headers.push('Comment');
+  headers.push('Status');
   headers.push('Last Modified');
   
   return headers;
@@ -424,8 +429,8 @@ function validateData(data) {
   
   if (!data.comment) {
     errors.push('Comment is required');
-  } else if (data.comment.length > 500) {
-    errors.push('Comment must be 500 characters or less');
+  } else if (data.comment.length > 550) {
+    errors.push('Comment must be 550 characters or less');
   }
   
   return errors;
@@ -448,14 +453,15 @@ function testSaveEntry() {
     classesMissed: 2,
     timesLate: 1,
     skills: {
-      'Responsibility': 'Excellent',
-      'Organization': 'Good',
-      'Independent Work': 'Excellent',
-      'Collaboration': 'Satisfactory',
-      'Initiative': 'Good',
-      'Self-Regulation': 'Excellent'
+      'Responsibility': 'E',
+      'Organization': 'G',
+      'Independent Work': 'E',
+      'Collaboration': 'S',
+      'Initiative': 'G',
+      'Self-Regulation': 'E'
     },
     comment: 'This is a test comment for the report card entry system.',
+    status: 'complete',
     timestamp: new Date().toISOString()
   };
   
